@@ -18,3 +18,20 @@ pub struct Emulator {
     d_timer: u8,
     s_timer: u8,
 }
+
+impl Emulator {
+    pub fn new() -> Self {
+        Self {
+            pc: START_ADDR,
+            ram: [0; RAM_SIZE],
+            screen: [false; SCREEN_WIDTH * SCREEN_HEIGHT],
+            v_registers: [0; NUM_REGISTERS],
+            i_register: 0,
+            sp: 0,
+            stack: [0; STACK_SIZE],
+            keys: [false; NUM_KEYS],
+            d_timer: 0,
+            s_timer: 0,
+        }
+    }
+}
