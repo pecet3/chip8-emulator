@@ -1,3 +1,5 @@
+use rand::random;
+
 const FONTSET_SIZE: usize = 80;
 const FONTSET: [u8; FONTSET_SIZE] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -108,6 +110,14 @@ impl Emulator {
         let digit4 = op & 0x000F;
 
         match (digit1, digit2, digit3, digit4) {
+            // set reg[x] to random
+            (0xC, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                let rng: u8 = random();
+
+                self.v_registers[x] = rng & nn;
+            }
             // jump to v0 + nnn
             (0xB, _, _, _) => {
                 let nnn = op & 0xFFF;
