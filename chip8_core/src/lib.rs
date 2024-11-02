@@ -70,9 +70,22 @@ impl Emulator {
         self.d_timer = 0;
         self.s_timer = 0;
     }
+    pub fn timers_tick(&mut self) {
+        if self.d_timer > 0 {
+            self.d_timer -= 1;
+        }
+        if self.s_timer > 0 {
+            if self.s_timer == 1 {
+                //here beep
+            }
+            self.s_timer -= 1;
+        }
+    }
     pub fn tick(&mut self) {
         let op = self.fetch();
+        self.execute(op);
     }
+
     fn fetch(&mut self) -> u16 {
         let higher_byte = self.ram[self.pc as usize] as u16;
         let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
@@ -88,4 +101,173 @@ impl Emulator {
         self.pc -= 1;
         self.stack[self.pc as usize]
     }
+    fn execute(&mut self, op: u16) {
+        let digit1 = (op & 0xF000) >> 12;
+        let digit2 = (op & 0x0F00) >> 8;
+        let digit3 = (op & 0x00F0) >> 4;
+        let digit4 = op & 0x000F;
+
+        match (digit1, digit2, digit3, digit4) {
+            // jump to v0 + nnn
+            (0xB, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.pc = (self.v_registers[0] as u16) + nnn;
+            }
+            //set special reg to addr pointer
+            (0xA, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.i_register = nnn;
+            }
+            // skip if reg[x] != reg[y]
+            (9, _, _, _) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                if self.v_registers[x] != self.v_registers[y] {
+                    self.pc += 2
+                }
+            }
+            // reg[x] <<=1
+            (8, _, _, 0xE) => {
+                let x = digit2 as usize;
+                let msb = (self.v_registers[x] >> 7) & 1;
+
+                self.v_registers[x] <<= 1;
+                self.v_registers[0xF] = msb;
+            }
+            // reg[y] -= reg[x]
+            (8, _, _, 7) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, borrow) = self.v_registers[y].overflowing_sub(self.v_registers[x]);
+                let new_vf = if borrow { 0 } else { 1 };
+                self.v_registers[x] = new_vx;
+
+                // setting the last v_reg (16) because it acts as carry flag
+                self.v_registers[0xF] = new_vf;
+            }
+            // reg[x] >>=1
+            (8, _, _, 6) => {
+                let x = digit2 as usize;
+                let lsb = self.v_registers[x] & 1;
+
+                self.v_registers[x] >>= 1;
+                self.v_registers[0xF] = lsb;
+            }
+            // reg[x] -= reg[y]
+            (8, _, _, 5) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, borrow) = self.v_registers[x].overflowing_sub(self.v_registers[y]);
+                let new_vf = if borrow { 0 } else { 1 };
+                self.v_registers[x] = new_vx;
+
+                // setting the last v_reg (16) because it acts as carry flag
+                self.v_registers[0xF] = new_vf;
+            }
+            // reg[x] += reg[y]
+            (8, _, _, 4) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+
+                let (new_vx, carry) = self.v_registers[x].overflowing_add(self.v_registers[y]);
+                let new_vf = if carry { 1 } else { 0 };
+                self.v_registers[x] = new_vx;
+
+                // setting the last v_reg (16) because it acts as carry flag
+                self.v_registers[0xF] = new_vf;
+            }
+            // reg[x] ^= reg[y]
+            (8, _, _, 3) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_registers[x] ^= self.v_registers[y];
+            }
+            // reg[x] &= reg[y]
+            (8, _, _, 2) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_registers[x] &= self.v_registers[y];
+            }
+            // reg[x] |= reg[y]
+            (8, _, _, 1) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_registers[x] |= self.v_registers[y];
+            }
+            // reg[x] == reg[y]
+            (8, _, _, 0) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                self.v_registers[x] = self.v_registers[y];
+            }
+            // reg[x] += nn
+            (7, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_registers[x] = self.v_registers[x].wrapping_add(nn);
+            }
+            // set a register x to nn
+            (6, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                self.v_registers[x] = nn;
+            }
+            // skip if r[x] == r[y]
+            (5, _, _, _) => {
+                let x = digit2 as usize;
+                let y = digit3 as usize;
+                if self.v_registers[x] == self.v_registers[y] {
+                    self.pc += 2;
+                }
+            }
+            // skip if r[x] != nn
+            (4, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_registers[x] != nn {
+                    self.pc += 2;
+                }
+            }
+            // skip if r[x] == nn
+            (3, _, _, _) => {
+                let x = digit2 as usize;
+                let nn = (op & 0xFF) as u8;
+                if self.v_registers[x] == nn {
+                    self.pc += 2;
+                }
+            }
+            // call a subroutine
+            (2, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.push(self.pc);
+                self.pc = nnn;
+            }
+            //jump to nnn
+            (1, _, _, _) => {
+                let nnn = op & 0xFFF;
+                self.pc = nnn;
+            }
+            // return from subroutine
+            (0, 0, 0xE, 0xE) => {
+                let ret_addr = self.pop();
+                self.pc = ret_addr;
+            }
+            //clear screen
+            (0, 0, 0xE, 0) => self.screen = [false; SCREEN_WIDTH * SCREEN_HEIGHT],
+            // no function
+            (0, 0, 0, 0) => return,
+            (_, _, _, _) => unimplemented!("There is no such opcode!: {}", op),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tick() {}
 }
