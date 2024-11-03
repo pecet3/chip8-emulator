@@ -87,7 +87,6 @@ impl Emulator {
         let op = self.fetch();
         self.execute(op);
     }
-
     fn fetch(&mut self) -> u16 {
         let higher_byte = self.ram[self.pc as usize] as u16;
         let lower_byte = self.ram[(self.pc + 1) as usize] as u16;
@@ -110,6 +109,62 @@ impl Emulator {
         let digit4 = op & 0x000F;
 
         match (digit1, digit2, digit3, digit4) {
+            // reg[x] = delay timer
+            (0xF, _, 0, 7) => {
+                let x = digit2 as usize;
+                self.v_registers[x] = self.d_timer;
+            }
+            //skip if some key not pressed
+            (0xE, _, 0xA, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_registers[x];
+                let key = self.keys[vx as usize];
+
+                if !key {
+                    self.pc += 2;
+                }
+            }
+            //skip if some key pressed
+            (0xE, _, 9, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_registers[x];
+                let key = self.keys[vx as usize];
+
+                if key {
+                    self.pc += 2;
+                }
+            }
+            // draw a sprite
+            (0xD, _, _, _) => {
+                let x_coord = self.v_registers[digit2 as usize] as u16;
+                let y_coord = self.v_registers[digit3 as usize] as u16;
+                let num_rows = digit4;
+
+                let mut flipped = false;
+
+                for y_line in 0..num_rows {
+                    let addr = self.i_register + y_line as u16;
+                    let pixels = self.ram[addr as usize];
+
+                    for x_line in 0..8 {
+                        if (pixels & (0b1000_0000 >> x_line)) != 0 {
+                            let x = (x_coord + x_line) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + y_line) as usize % SCREEN_HEIGHT;
+
+                            let idx = x + SCREEN_WIDTH * y;
+
+                            flipped |= self.screen[idx];
+                            self.screen[idx] ^= true;
+                        }
+                    }
+                }
+
+                if flipped {
+                    self.v_registers[0xF] = 1;
+                } else {
+                    self.v_registers[0xF] = 1;
+                }
+            }
             // set reg[x] to random
             (0xC, _, _, _) => {
                 let x = digit2 as usize;
@@ -279,5 +334,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tick() {}
+    fn test_exe() {
+        let mut emu = Emulator::new();
+        emu.execute(0x00E0);
+        assert_eq!(emu.pc, 1);
+    }
 }
