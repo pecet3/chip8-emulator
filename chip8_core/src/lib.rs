@@ -109,6 +109,27 @@ impl Emulator {
         let digit4 = op & 0x000F;
 
         match (digit1, digit2, digit3, digit4) {
+            //  delay timer = reg[x]
+            (0xF, _, 1, 5) => {
+                let x = digit2 as usize;
+                self.d_timer = self.v_registers[x];
+            }
+            // wait for any key pressed
+            (0xF, _, _, 0xA) => {
+                let x = digit2 as usize;
+                let mut is_pressed = false;
+
+                for i in 0..self.keys.len() {
+                    if self.keys[i] {
+                        self.v_registers[x] = i as u8;
+                        is_pressed = true;
+                        break;
+                    }
+                }
+                if !is_pressed {
+                    self.pc -= 2;
+                }
+            }
             // reg[x] = delay timer
             (0xF, _, 0, 7) => {
                 let x = digit2 as usize;
