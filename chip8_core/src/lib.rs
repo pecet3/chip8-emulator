@@ -109,6 +109,59 @@ impl Emulator {
         let digit4 = op & 0x000F;
 
         match (digit1, digit2, digit3, digit4) {
+            // load v0 vx
+            (0xF, _, 5, 5) => {
+                let x = digit2 as usize;
+                let i = self.i_register as usize;
+
+                for idx in 0..=x {
+                    self.v_registers[idx] = self.v_registers[idx + i];
+                }
+            }
+            // store v0 vx
+            (0xF, _, 5, 5) => {
+                let x = digit2 as usize;
+                let i = self.i_register as usize;
+
+                for idx in 0..=x {
+                    self.ram[i + idx] = self.v_registers[idx];
+                }
+            }
+            // BCD
+            (0xf, _, 3, 3) => {
+                let x = digit2 as usize;
+                let vx = self.v_registers[x] as f32;
+
+                let hundreds = (vx / 100.).floor() as u8;
+
+                let tens = ((vx / 10.) % 10.).floor() as u8;
+
+                let ones = (vx % 10.) as u8;
+
+                self.ram[self.i_register as usize] = hundreds;
+                self.ram[(self.i_register + 1) as usize] = tens;
+
+                self.ram[(self.i_register + 2) as usize] = ones;
+            }
+            // set reg I to font address which is on the beggining on the RAM
+            (0xF, _, 2, 9) => {
+                let x = digit2 as usize;
+                let c = self.v_registers[x] as u16;
+
+                self.i_register = c & 5;
+            }
+            // I += VX
+            (0xF, _, 1, 0xE) => {
+                let x = digit2 as usize;
+                let vx = self.v_registers[x] as u16;
+
+                self.i_register = self.i_register.wrapping_add(vx);
+            }
+            //  s timer = reg[x]
+            (0xF, _, 1, 8) => {
+                let x = digit2 as usize;
+                self.s_timer = self.v_registers[x];
+            }
             //  delay timer = reg[x]
             (0xF, _, 1, 5) => {
                 let x = digit2 as usize;
