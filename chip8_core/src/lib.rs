@@ -111,11 +111,11 @@ impl Emulator {
     }
     fn push(&mut self, val: u16) {
         self.stack[self.sp as usize] = val;
-        self.pc += 1;
+        self.sp += 1;
     }
     fn pop(&mut self) -> u16 {
-        self.pc -= 1;
-        self.stack[self.pc as usize]
+        self.sp -= 1;
+        self.stack[self.sp as usize]
     }
     fn execute(&mut self, op: u16) {
         let digit1 = (op & 0xF000) >> 12;
@@ -125,12 +125,12 @@ impl Emulator {
 
         match (digit1, digit2, digit3, digit4) {
             // load v0 vx
-            (0xF, _, 5, 5) => {
+            (0xF, _, 6, 5) => {
                 let x = digit2 as usize;
                 let i = self.i_register as usize;
 
                 for idx in 0..=x {
-                    self.v_registers[idx] = self.v_registers[idx + i];
+                    self.v_registers[idx] = self.ram[idx + i];
                 }
             }
             // store v0 vx
